@@ -3,3 +3,8 @@ Revision history for Perl extension System2.
 0.01  Fri Apr  6 11:38:59 2001
 	- original version; created by h2xs 1.19
 
+0.80 Thu Apr  5 19:01:49 EST 2001
+	- original release
+
+0.81 Thu Jun 28 16:17:02 EDT 2001
+	- fixed bugs WRT signal handling, presering exit status

@@ -6,7 +6,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..2\n"; }
+BEGIN { $| = 1; print "1..4\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use System2;
 $loaded = 1;
@@ -18,6 +18,8 @@ print "ok 1\n";
 # (correspondingly "not ok 13") depending on the success of chunk 13
 # of the test code):
 
+use strict;
+
 if (0)
 {
   print "testing $System2::VERSION\n";
@@ -25,17 +27,34 @@ if (0)
   print "debug is $System2::debug\n";
 }
 
-my @args = './test_foo.pl';
-my ($out, $err) = system2(@args);
-my ($exit_value, $signal_num, $dumped_core) = &System2::exit_status($?);
 
-#print "exit: $?\n";
+my $tmp = "/tmp/tmp.$$.".time();
+my $tmpout = $tmp.'.out';
+my $tmperr = $tmp.'.err';
 
-#print "(exit_value, signal_num, dumped_core) = ($exit_value, $signal_num, $dumped_core)\n";
+# Run some deterministic program to generate stdout as well as stderr
+# (We're going to run this twice, and the results have to match,
+# so no time-dependant code)
 
-if ( ( $exit_value == 4) &&
-     ( $out eq 'data to STDOUT' ) &&
-     ( $err eq 'data to STDERR' )
-   )
-{ print "ok 2\n"; } else
-{ print "not ok 2\n"; }
+my @command = qw( ./io_test.sh);
+
+# run it once via system(), isolating STDOUT and STDERR into separate files
+my @system_wrap = ( 'sh', '-c', "( ".  join(' ', @command).
+	            " > $tmpout ) > $tmperr 2>&1");
+system ( @system_wrap );
+my $stat = $?;
+
+# read the results into scalars; clean up
+my ($Out, $Err);
+open(TMP, $tmpout); while(<TMP>) { $Out .= $_ } close TMP;
+open(TMP, $tmperr); while(<TMP>) { $Err .= $_ } close TMP;
+unlink $tmpout, $tmperr;
+
+# run that same command, this time via system2()
+my ($out, $err) = system2(@command);
+my $Stat = $?; 
+
+# and compare.  this will make sure that we didn't lose any output.
+if ($Stat eq $stat) { print "ok 2\n"; } else { print "not ok 2\n"; }
+if ($Out eq $out) { print "ok 3\n"; } else { print "not ok 3\n"; }
+if ($Err eq $err) { print "ok 4\n"; } else { print "not ok 4\n"; }

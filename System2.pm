@@ -10,26 +10,29 @@ require Exporter;
 require AutoLoader;
 
 @ISA = qw(Exporter AutoLoader);
-# Items to export into callers namespace by default. Note: do not export
-# names by default without a very good reason. Use EXPORT_OK instead.
-# Do not simply export all your public functions/methods/constants.
-@EXPORT = qw(
-  &system2	
-);
-$VERSION = '0.80';
+@EXPORT = qw( &system2 );
+$VERSION = '0.81';
 
 use vars qw/ $debug /;
 
+# set to nonzero for diagnostics.
 $debug=0;
-#$debug++; # uncomment for diagnostics.
+
+#---------------------------------
+
+my @handle = qw(C_OUT C_ERR);
+my $sigchld; # previous SIGCHLD handler
+my @args;
+my %buf = ();
+my %fn = ();
+my ($rin, $win, $ein) = ('') x 3;
+my ($rout, $wout, $eout) = ('') x 3;
+my $pid;
 
 #---------------------------------
 sub system2
 {
-  my @args = @_;
-
-  my %buf = ();
-  my %fn = ();
+  @args = @_;
 
   # set up handles to talk to forked process
   pipe(P_IN, C_IN) || croak "can't pipe IN: $!";
@@ -37,11 +40,9 @@ sub system2
   pipe(C_ERR, P_ERR) || croak "can't pipe ERR: $!";
 
   # prep filehandles.  get file numbers, set to non-blocking.
-  # fd masks for select()
-  my ($rin, $win, $ein) = ('') x 3;
-  my ($rout, $wout, $eout) = ('') x 3;
+
   no strict 'refs';
-  foreach('C_OUT', 'C_ERR')
+  foreach( @handle )
   {
     # set to non-blocking
     my $ret=0;
@@ -58,46 +59,64 @@ sub system2
 
   $debug && carp "forking [@args]";
 
-  my $pid = fork();
+  # temporarily disable SIGCHLD handler
+  $sigchld = (defined $SIG{'CHLD'}) ? $SIG{'CHLD'} : 'DEFAULT';
+  $SIG{'CHLD'} = 'DEFAULT';
+
+  $pid = fork();
   croak "can't fork [@args]: $!" unless defined $pid;
 
-  if (!$pid) # child
-  {
-    $debug && carp "child pid: $$";
+  &child if (!$pid); # child
+  my @res = &parent; # parent
 
-    # close unneeded handles, dup as neccesary.
-    close C_IN || croak "child: can't close IN: $!";
-    close C_OUT || croak "child: can't close OUT: $!";
-    close C_ERR || croak "child: can't close ERR: $!";
+  $SIG{'CHLD'} = $sigchld; # restore SIGCHLD handler
 
-    open(STDOUT, '>&P_OUT') || croak "child: can't dup STDOUT: $!";
-    open(STDERR, '>&P_ERR') || croak "child: can't dup STDERR: $!";
+  @res; # return output from child process
+}
 
-    select C_OUT; $|=1;
-    select C_ERR; $|=1;
+#---------------------------------
 
-    # from perldiag(1):
-    #  Statement unlikely to be reached
-    #      (W) You did an exec() with some statement after it
-    #      other than a die().  This is almost always an error,
-    #      because exec() never returns unless there was a
-    #      failure.  You probably wanted to use system() instead,
-    #      which does return.  To suppress this warning, put the
-    #      exec() in a block by itself.
+sub child
+{
+  $debug && carp "child pid: $$";
 
-    { exec { $args[0] } @args; }
+  # close unneeded handles, dup as neccesary.
+  close C_IN || croak "child: can't close IN: $!";
+  close C_OUT || croak "child: can't close OUT: $!";
+  close C_ERR || croak "child: can't close ERR: $!";
 
-    croak "can't exec [@args]: $!";
-  }
+  open(STDOUT, '>&P_OUT') || croak "child: can't dup STDOUT: $!";
+  open(STDERR, '>&P_ERR') || croak "child: can't dup STDERR: $!";
 
-  # parent
+  select C_OUT; $|=1;
+  select C_ERR; $|=1;
 
+  # from perldiag(1):
+  #  Statement unlikely to be reached
+  #      (W) You did an exec() with some statement after it
+  #      other than a die().  This is almost always an error,
+  #      because exec() never returns unless there was a
+  #      failure.  You probably wanted to use system() instead,
+  #      which does return.  To suppress this warning, put the
+  #      exec() in a block by itself.
+
+  { exec { $args[0] } @args; }
+
+  croak "can't exec [@args]: $!";
+}
+
+#---------------------------------
+
+# parent
+
+sub parent
+{
   # close unneeded handles
   close P_IN || croak "can't close IN: $!";
   close P_OUT || croak "can't close OUT: $!";
   close P_ERR || croak "can't close ERR: $!";
 
-  my $status =  undef;
+  my $status = undef; # exit status of child
 
   # get data from filehandles, append to appropriate buffers.
   my $nfound = 0;
@@ -107,7 +126,7 @@ sub system2
     if ($nfound == -1) { carp "select() said $!\n"; last }
 
     no strict 'refs';
-    foreach('C_OUT', 'C_ERR')
+    foreach( @handle )
     {
       if (vec($rout, $fn{$_}, 1))
       {
@@ -128,20 +147,20 @@ sub system2
 
     # check for dead child
 
-    # status of exiting child; the waitpid returns -1 if
+    # pid of exiting child; the waitpid returns -1 if
     # we waitpid again...
-    my $child_status = $?;
     my $child = waitpid($pid, WNOHANG);
 
-    # XXX is it possible for me to have data in a buffer after the
+    last if ($child == -1); # child already exited
+    #next unless $child;     # no stopped or exited children
+
+    # Is it possible for me to have data in a buffer after the
     # child has exited?  Yep...
 
-    if ($child == -1)
-    {
-      $? = $child_status;
-      last;
-    }
+    $status = $?;
   }
+
+  $? = $status; # exit with child's status
 
   ($buf{$fn{'C_OUT'}}, $buf{$fn{'C_ERR'}});
 }
