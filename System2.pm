@@ -11,7 +11,7 @@ require AutoLoader;
 
 @ISA = qw(Exporter AutoLoader);
 @EXPORT = qw( &system2 );
-$VERSION = '0.83';
+$VERSION = '0.84';
 
 use vars qw/ $debug /;
 
@@ -25,8 +25,8 @@ my $sigchld; # previous SIGCHLD handler
 my @args;
 my %buf = ();
 my %fn = ();
-my ($rin, $win, $ein) = ('') x 3;
-my ($rout, $wout, $eout) = ('') x 3;
+my ($rin, $win, $ein);
+my ($rout, $wout, $eout);
 my $pid;
 
 my $path;
@@ -69,6 +69,8 @@ sub system2
 
   # prep filehandles.  get file numbers, set to non-blocking.
 
+  ($rin, $win, $ein) = ('') x 3;
+  ($rout, $wout, $eout) = ('') x 3;
   no strict 'refs';
   foreach( @handle )
   {
@@ -144,7 +146,8 @@ sub parent
   close P_OUT || croak "can't close OUT: $!";
   close P_ERR || croak "can't close ERR: $!";
 
-  my $status = undef; # exit status of child
+  # default exit status of child (we fail unless we succeed)
+  my $status = (1<<8);
 
   # get data from filehandles, append to appropriate buffers.
   my $nfound = 0;
