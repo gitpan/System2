@@ -7,4 +7,7 @@ Revision history for Perl extension System2.
 	- original release
 
 0.81 Thu Jun 28 16:17:02 EDT 2001
-	- fixed bugs WRT signal handling, presering exit status
+	- fixed bugs WRT signal handling, preserving exit status
+
+0.82 Fri Oct  5 15:25:15 EDT 2001
+	- added copyright/license information into README

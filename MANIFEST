@@ -3,3 +3,5 @@ MANIFEST
 Makefile.PL
 System2.pm
 test.pl
+README
+io_test.sh

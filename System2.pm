@@ -11,7 +11,7 @@ require AutoLoader;
 
 @ISA = qw(Exporter AutoLoader);
 @EXPORT = qw( &system2 );
-$VERSION = '0.81';
+$VERSION = '0.82';
 
 use vars qw/ $debug /;
 
