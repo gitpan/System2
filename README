@@ -1,0 +1,47 @@
+NAME
+    System2 - like system(), but with STDERR available as well
+
+SYNOPSIS
+      use System2;
+
+      $System2::debug++;
+
+      my ($out, $err) = system2(@args);
+      my ($exit_value, $signal_num, $dumped_core) = &System2::exit_status($?);
+      
+      print "EXIT: exit_value $exit_value signal_num ".
+            "$signal_num dumped_core $dumped_core\n";
+      
+      print "OUT:\n$out";
+      print "ERR:\n$err"
+
+DESCRIPTION
+    Execute a command, and returns output from STDOUT and STDERR. Much like
+    system(). $? is set. (Much cheaper than using open3() to get the same
+    info.)
+
+    If $debug is set, on-the fly diagnostics will be reported about how much
+    data is being read.
+
+    Provides for convienence, a routine exit_status() to break out the exit
+    value into:
+
+      - the exit value of the subprocess
+      - which signal, if any, the process died from
+      - reports whether there was a core dump.
+
+    All right from perlvar(1), so no surprises.
+
+CAVEATS
+    Although I've been using this module for literally years now personally,
+    consider it lightly tested, until I get feedback from the public at
+    large.
+
+    Have at it.
+
+AUTHOR
+    Brian Reichert <reichert@numachi.com>
+
+SEE ALSO
+    perlfunc(1), perlvar(1).
+
