@@ -11,7 +11,7 @@ require AutoLoader;
 
 @ISA = qw(Exporter AutoLoader);
 @EXPORT = qw( &system2 );
-$VERSION = '0.82';
+$VERSION = '0.83';
 
 use vars qw/ $debug /;
 
@@ -29,10 +29,38 @@ my ($rin, $win, $ein) = ('') x 3;
 my ($rout, $wout, $eout) = ('') x 3;
 my $pid;
 
+my $path;
+
 #---------------------------------
 sub system2
 {
   @args = @_;
+
+  # fake named parameters
+  my $named_param_check=0;
+  if ( $#args % 2 )
+  {
+    my %param = @args;
+    # look for arg0 path args
+    if ((exists $param{'args'}) && ( ref ($param{'args'}) eq 'ARRAY') )
+    {
+      @args = @{$param{'args'}};
+      $path = $param{'path'};
+      unshift @args, exists $param{'arg0'} ? $param{'arg0'} : $path;
+      $named_param_check++;
+    }
+  }
+
+  # if we didn't find useful named parameters, treat as the legacy interface
+  if (! $named_param_check)
+  {
+    if (ref($args[0]) eq 'ARRAY')
+    {
+      my $arg0;
+      ($path, $arg0) = @{ shift @args };
+      unshift @args, $arg0;
+    } else { $path = $args[0]; }
+  }
 
   # set up handles to talk to forked process
   pipe(P_IN, C_IN) || croak "can't pipe IN: $!";
@@ -57,7 +85,7 @@ sub system2
   }
   use strict 'refs';
 
-  $debug && carp "forking [@args]";
+  $debug && carp "fork/exec: [$path] [".join('] [', @args)."]";
 
   # temporarily disable SIGCHLD handler
   $sigchld = (defined $SIG{'CHLD'}) ? $SIG{'CHLD'} : 'DEFAULT';
@@ -80,7 +108,7 @@ sub child
 {
   $debug && carp "child pid: $$";
 
-  # close unneeded handles, dup as neccesary.
+  # close unneeded handles, dup as necessary.
   close C_IN || croak "child: can't close IN: $!";
   close C_OUT || croak "child: can't close OUT: $!";
   close C_ERR || croak "child: can't close ERR: $!";
@@ -100,9 +128,9 @@ sub child
   #      which does return.  To suppress this warning, put the
   #      exec() in a block by itself.
 
-  { exec { $args[0] } @args; }
+  { exec { $path } @args; }
 
-  croak "can't exec [@args]: $!";
+  croak "can't exec [$path] [".join('] [', @args)."]: $!";
 }
 
 #---------------------------------
@@ -184,7 +212,7 @@ __END__
 
 =head1 NAME
 
-System2 - like system(), but with STDERR available as well
+System2 - like system(), but with access to STDOUT and STDERR.
 
 =head1 SYNOPSIS
 
@@ -193,6 +221,7 @@ System2 - like system(), but with STDERR available as well
   $System2::debug++;
 
   my ($out, $err) = system2(@args);
+
   my ($exit_value, $signal_num, $dumped_core) = &System2::exit_status($?);
   
   print "EXIT: exit_value $exit_value signal_num ".
@@ -203,27 +232,83 @@ System2 - like system(), but with STDERR available as well
 
 =head1 DESCRIPTION
 
-Execute a command, and returns output from STDOUT and STDERR.  Much
-like system().  $? is set.  (Much cheaper than using open3() to
-get the same info.)
+The module presents an interface for executing a command, and
+gathering the output from STDOUT and STDERR.
+
+Benefits of this interface:
+
+=over 2
+
+=item -
+
+the Bourne shell is never implicitly invoked: saves a stray exec(),
+and bypasses those nasty shell quoting problems.
+
+=item -
+
+cheaper to run than open3().
+
+=item -
+
+augmented processing of arguments, to allow for overriding arg[0]
+(eg. initiating a login shell).
+
+=back
+
+STDOUT and STDERR are returned in scalars.  $? is set.  (Split on
+$/ if you want the expected lines back.)
 
 If $debug is set, on-the fly diagnostics will be reported about
 how much data is being read.
 
-Provides for convienence, a routine exit_status() to break out the
-exit value into:
+Provides for convenience, a routine exit_status() to break out the
+exit value into separate scalars, straight from perlvar(1):
 
-  - the exit value of the subprocess
-  - which signal, if any, the process died from
-  - reports whether there was a core dump.
+=over 2
 
-All right from perlvar(1), so no surprises.
+=item -
+
+the exit value of the subprocess
+
+=item -
+
+which signal, if any, the process died from
+
+=item -
+
+reports whether there was a core dump.
+
+=back
+
+There are two interfaces available:  a regular list, or named
+parameters:
+
+These are equivalent:
+
+  my @args = ( '/bin/sh', '-x', '-c', 'echo $0' );
+
+  my @args = ( path => '/bin/sh', args => [ '-c', 'echo $0' ] );
+
+To override arg[0], pass in a arrayref for the first argument, or
+use the arg0 named parameter.  Contrast the prior argument lists
+with these below:
+
+  my @args = ( ['/bin/sh', '-sh'], '-c', 'echo $0' );
+
+  my @args = ( path => '/bin/sh', args => ['-c', 'echo $0'],
+               arg0 => '-sh' );
 
 =head1 CAVEATS
 
+Obviously, the returned scalars can be quite large, depending on
+the nature of the program being run.  In the future, I intend to
+introduce options to allow for temporary file handles, but for now,
+be aware of the potential resource usage.
+
 Although I've been using this module for literally years now
 personally, consider it lightly tested, until I get feedback from
-the public at large.
+the public at large.  (Treat this as a hint to tell me that you're
+using it. :)
 
 Have at it.
 

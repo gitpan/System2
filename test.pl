@@ -8,6 +8,7 @@
 
 BEGIN { $| = 1; print "1..4\n"; }
 END {print "not ok 1\n" unless $loaded;}
+use POSIX;
 use System2;
 $loaded = 1;
 print "ok 1\n";
@@ -27,16 +28,15 @@ if (0)
   print "debug is $System2::debug\n";
 }
 
-
-my $tmp = "/tmp/tmp.$$.".time();
-my $tmpout = $tmp.'.out';
-my $tmperr = $tmp.'.err';
+my $tmpout = POSIX::tmpnam();
+my $tmperr = POSIX::tmpnam();
 
 # Run some deterministic program to generate stdout as well as stderr
 # (We're going to run this twice, and the results have to match,
-# so no time-dependant code)
+# so no time-dependant code).  (Foolish people might run this as
+# root, so try to keep this nondestructive.)
 
-my @command = qw( ./io_test.sh);
+my @command = qw( perl -w ./io_test.pl);
 
 # run it once via system(), isolating STDOUT and STDERR into separate files
 my @system_wrap = ( 'sh', '-c', "( ".  join(' ', @command).

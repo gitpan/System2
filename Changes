@@ -11,3 +11,8 @@ Revision history for Perl extension System2.
 
 0.82 Fri Oct  5 15:25:15 EDT 2001
 	- added copyright/license information into README
+
+0.83 Sat Oct 25 17:31:01 EDT 2003
+	- as per suggestion from Remy Chibois <rchibois@free.fr>,
+	  added method for overriding arg(0).
+	  (expanded into named arguments, etc.)
